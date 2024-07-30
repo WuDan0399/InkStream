@@ -109,7 +109,7 @@ class inkstream:
         final_edges = torch.load(osp.join(data_dir, "final_edges.pt"))
         final_out_edge_dict = to_dict_wiz_cache(final_edges, data_dir, f'final_out_edge_dict.pickle')
         final_in_edge_dict = to_dict_wiz_cache(final_edges[[1, 0], :], data_dir, f"final_in_edge_dict.pickle")
-        del final_edges
+        # del final_edges
         
 
         initial_edges = torch.load(osp.join(data_dir, "initial_edges.pt"))
@@ -248,6 +248,12 @@ class inkstream:
         event_q, event_q_bkp = EventQueue(), EventQueue()
 
         start = time.perf_counter()
+
+        # pynvml.nvmlInit()
+        # # Start monitoring GPU memory
+        # monitor = GPUMemoryMonitor()
+        # monitor.start()
+
         self.create_events_for_changed_edges(event_q, inserted_edges, removed_edges, intm_initial["layer1"]["before"])
         self.event_dict = event_q.reduce(
             self.monotonic_aggregator, self.accumulative_aggregator, self.user_reducer)
@@ -313,15 +319,25 @@ class inkstream:
                 self.create_events_for_changed_edges(
                     event_q_bkp, inserted_edges, removed_edges, intm_initial[f"layer{it_layer + 2}"]["before"], out)
 
+                # update the next layer input
+                for node in out:
                     intm_initial[f"layer{it_layer + 2}"]["before"][node] = out[node]
                     self.user_propagate(node, out[node], event_q_bkp)
-
+                
+                # update the event queue
                 event_q = event_q_bkp
                 event_q_bkp = EventQueue()
                 self.event_dict = event_q.reduce(
                     self.monotonic_aggregator, self.accumulative_aggregator, self.user_reducer)
 
+        # Stop monitoring GPU memory
+        # monitor.stop()
+        # monitor.join()  # Wait for the monitoring thread to finish
+        # print(f"Maximum GPU Memory Usage: {monitor.max_memory} MiB")
+        # print(f"Memory Usage Over Time: {monitor.memory_usage}")
+
         end = time.perf_counter()
+
         return cnt_dict, end - start
 
     @torch.no_grad()

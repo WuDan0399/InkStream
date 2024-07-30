@@ -154,7 +154,6 @@ def main():
     dataset = load_dataset(args)
 
     data = dataset[0]
-    use_loader = True
 
     if args.loader == "quiver":
         csr_topo = quiver.CSRTopo(data.edge_index)  
@@ -164,7 +163,6 @@ def main():
 
     out_channels = dataset.num_classes if args.dataset != "papers" else dataset.num_classes + 1
     if args.model == "GCN":
-
         model = pureGCN(dataset.num_features,
                         args.hidden_channels, out_channels, args)
     elif args.model == "SAGE":
@@ -226,7 +224,7 @@ def main():
             log.close()
 
         elif args.range == "affected":
-            create_directory(out_folder)
+            #create_directory(out_folder)
             prefix = "_".join(
                 [args.model, args.dataset, args.aggr, str(args.perbatch), args.stream, args.loader])
             timing_sampler(data, args)

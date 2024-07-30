@@ -2,70 +2,6 @@ from torch_geometric.data import InMemoryDataset, Dataset
 from torch_geometric.datasets import Reddit, Planetoid, CitationFull, Yelp, AmazonProducts
 from utils import *
 
-class RandFeatDataset(InMemoryDataset):
-    def __init__(self, dir, file_name, dataset_name, feature_length=1024,
-                 transform=None, pre_transform=None, skiprows=2, has_time=True
-                 ):
-        self.dir = dir
-        self.file_name = file_name
-        self.dataset_name = dataset_name
-        self.feature_length = feature_length
-        self.skiprows = skiprows
-        self.has_time = has_time
-        super(RandFeatDataset, self).__init__(dir, transform, pre_transform)
-        self.data, self.slices = torch.load(self.processed_paths[0])
-
-    @property
-    def raw_file_names(self):
-        return [self.file_name]
-
-    @property
-    def processed_file_names(self):
-        return ['data.pt']
-
-    def download(self):
-        pass
-
-    def process(self):
-        data_list = []
-
-        if self.file_name.endswith('.csv'):
-            import pandas as pd
-            df = pd.read_table(osp.join(self.dir, self.file_name), delim_whitespace=True)
-            if '/' in str(df['time'].iloc[0]):
-                df['time'] = pd.to_datetime(df['time']).astype(int) // 10 ** 9  
-            data = df.to_numpy()
-        else:
-            data = np.loadtxt(fname=osp.join(self.dir, self.file_name), skiprows=self.skiprows)
-
-        edge_index = torch.tensor(data[:, :2], dtype=torch.long).t().contiguous()
-        unique_nodes = torch.unique(edge_index)
-        mapping = {node.item(): i for i, node in enumerate(unique_nodes)}
-        edge_index = torch.tensor([[mapping[node.item()] for node in edge] for edge in edge_index],
-                                            dtype=torch.long)
-        num_nodes = len(unique_nodes)
-        embedding = torch.nn.Embedding(num_nodes, self.feature_length) 
-        x = embedding(torch.range(start=0, end=num_nodes-1, dtype=torch.long))
-
-        if self.has_time:
-            edge_weight = torch.tensor(data[:, 2], dtype=torch.float)
-            edge_time = torch.tensor(data[:, 3], dtype=torch.float)
-            data = Data(x=x, edge_index=edge_index, edge_attr=edge_weight, time=edge_time)
-        else:
-            data = Data(x=x, edge_index=edge_index)
-        data_list.append(data)
-
-        if self.pre_filter is not None:
-            data_list = [data for data in data_list if self.pre_filter(data)]
-
-        if self.pre_transform is not None:
-            data_list = [self.pre_transform(data) for data in data_list]
-
-        data, slices = self.collate(data_list)
-        torch.save((data, slices), self.processed_paths[0])
-
-
-
 def generate_snapshots(data:Data, dataset_name:str, stream:str, args:argparse.Namespace):
     batch_sizes = defaultConfigs.batch_sizes
     num_samples = defaultConfigs.num_samples
@@ -128,30 +64,6 @@ def generate_snapshots(data:Data, dataset_name:str, stream:str, args:argparse.Na
                     torch.save(removed_edges, (osp.join(out_folder, "removed_edges.pt")))
     print("generate snapshots, end.")
 
-def one_hot_fake_label(dataset: pyg.data.Data, max_degree: int = 1000) -> list:
-    new_dataset = []
-    for data in dataset:
-        node_degree = degree(data.edge_index[0]) 
-        real_max_degree = torch.max(node_degree).item()
-        node_degree = torch.clamp(
-            node_degree, max=max_degree - 1
-        ) 
-        unique_degree, indices = torch.unique(
-            node_degree, return_inverse=True
-        )
-        one_hot_size = max(
-            len(unique_degree), min(int(real_max_degree), max_degree)
-        )
-        new_x = torch.zeros(
-            (len(node_degree), one_hot_size), dtype=torch.float
-        )
-        new_x[torch.arange(len(node_degree)), indices] = 1
-        new_y = torch.randint(0, 2, data.y.shape[:1], dtype=torch.long)
-        data.x = new_x
-        data.y = new_y
-        new_dataset.append(data)
-    return new_dataset
-
 
 def load_dataset(args: argparse.Namespace, transform: Optional[Callable] = None):
     from ogb.nodeproppred import PygNodePropPredDataset
@@ -186,25 +98,8 @@ def load_dataset(args: argparse.Namespace, transform: Optional[Callable] = None)
         dataset = PygNodePropPredDataset(name="ogbn-products", root=osp.join(root, "datasets"))
     elif args.dataset == "papers":
         dataset = PygNodePropPredDataset(name="ogbn-papers100M", root=osp.join(root, "datasets"))
-    elif args.dataset == "wiki": 
-        dataset = RandFeatDataset(dir=osp.join(root, "datasets", "wikipedia_link_en"),
-                                  file_name="out.wikipedia_link_en", dataset_name="wiki", transform=transform,
-                                  skiprows=1, has_time=False)
     else:
-        if args.dataset == 'uci':
-            dataset = RandFeatDataset(dir=osp.join(root, "datasets", "dynamic_datasets", "opsahl-ucsocial"),
-                                      file_name="out.opsahl-ucsocial", dataset_name="uci", transform = transform)
-        elif args.dataset == "dnc":
-            dataset = RandFeatDataset(dir=osp.join(root, "datasets", "dynamic_datasets", "dnc-temporalGraph"),
-                                      file_name="out.dnc-temporalGraph", dataset_name="dnc", transform = transform)
-        elif args.dataset == "epi":
-            dataset = RandFeatDataset(dir=osp.join(root, "datasets", "dynamic_datasets", "epinions"),
-                                      file_name="user_rating.csv", dataset_name="epi", transform = transform)
-        else:
-            print("No such dataset. Available: Cora/cora/PubMed/reddit/yelp/uci/dnc/epi/products/papers")
-
-    if args.binary:
-        dataset = one_hot_fake_label(dataset, max_degree=500)
+            print("No such dataset. Available: Cora/cora/PubMed/reddit/yelp/products/papers")
 
     generate_snapshots(dataset[0], args.dataset, args.stream, args)  # generate snapshots for the first(only) graph
 

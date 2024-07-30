@@ -12,9 +12,9 @@ class pureGCN(torch.nn.Module):  # Only for inference
     def __init__(self, in_channels, hidden_channels, out_channels, args):
         super().__init__()
         self.conv1 = GCNConv(in_channels, hidden_channels, cached=False,
-                             normalize=False, aggr=args.aggr)
+                             normalize=True, aggr=args.aggr)
         self.conv2 = GCNConv(hidden_channels, out_channels, cached=False,
-                             normalize=False, aggr=args.aggr)
+                             normalize=True, aggr=args.aggr)
 
     def forward(self, x, edge_index, edge_weight=None):
         if isinstance(edge_index, list):
@@ -37,7 +37,17 @@ def test(model, loader):
     model.eval()
 
     total_examples = total_correct = 0
+
+    # pynvml.nvmlInit()
+    # Start monitoring GPU memory
+    # monitor = GPUMemoryMonitor()
+    # monitor.start()
+
+    i = 0
     for batch in tqdm(loader):
+        i+=1
+        if i>5000:
+            break
         batch.to(device)
         batch_size = batch.batch_size
         out = model(batch.x, batch.edge_index)[
@@ -54,10 +64,20 @@ def test(model, loader):
             total_examples += batch_size
         total_correct += int((pred[:batch_size] == batch.y[:batch_size]).sum())
         total_examples += batch_size
+
+    # Stop monitoring GPU memory
+    # monitor.stop()
+    # monitor.join()  # Wait for the monitoring thread to finish
+    #
+    # print(f"Maximum GPU Memory Usage: {monitor.max_memory} MiB")
+
+    # print(f"Memory Usage Over Time: {monitor.memory_usage}")
+
     return total_correct / total_examples
 
 
 def main():
+    parser = argparse.ArgumentParser()
     args = general_parser(parser)
     dataset = load_dataset(args)
     data = dataset[0]
@@ -87,7 +107,7 @@ def main():
         if args.dataset in ['papers', "products"]:
             num_eval_nodes = 100000
             node_indices = torch.randperm(data.num_nodes)[:num_eval_nodes]
-            loader = data_loader(data, num_layers=2, num_neighbour_per_layer=-1,
+            loader = data_loader(data, num_layers=2, num_neighbour_per_layer=10,
                                  separate=False, input_nodes=node_indices)
             start = time.perf_counter()
             test(model, loader)
@@ -96,9 +116,9 @@ def main():
                 f'Full Graph. Inference time: {(end - start) * (data.num_nodes/num_eval_nodes) :.4f} seconds, averaged for {num_eval_nodes} nodes.')
 
         else:
-            loader = data_loader(data, separate=False)
+            loader = data_loader(data, separate=False, num_layers=2, num_neighbour_per_layer=10,)
             start = time.perf_counter()
-            num_iter = 5
+            num_iter = 3  # 5 in submitted version
             for _ in range(num_iter):
                 test(model, loader)
             end = time.perf_counter()

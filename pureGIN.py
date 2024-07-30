@@ -134,10 +134,16 @@ if __name__ == '__main__':
                     len(re.findall("[0-9]\.[0-9]+", model_name)) != 0]
         index_best_model = np.argmax(accuracy)
 
-        num_eval_nodes = 100000
-        node_indices = torch.randperm(data.num_nodes)[:num_eval_nodes]
-        loader = data_loader(data, num_layers=5, num_neighbour_per_layer=-1,
-                             separate=False, input_nodes=node_indices)
+        threshold = 200000
+        num_eval_nodes = data.num_nodes
+        if data.num_nodes>threshold:
+            num_eval_nodes = threshold
+            node_indices = torch.randperm(data.num_nodes)[:num_eval_nodes]
+            loader = data_loader(data, num_layers=5, num_neighbour_per_layer=10,
+                                 separate=False, input_nodes=node_indices)
+        else:
+            loader = data_loader(data, num_layers=5, num_neighbour_per_layer=10,
+                                 separate=False)
 
         sample_batch = next(iter(loader))
         if args.dataset == 'papers':

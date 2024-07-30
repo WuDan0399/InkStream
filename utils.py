@@ -10,6 +10,7 @@ from operator import attrgetter
 from collections import defaultdict
 from typing import Tuple, Union, List, Dict, Optional, Callable
 
+
 import numpy as np
 import torch
 import torch_geometric as pyg
@@ -22,12 +23,15 @@ from torch_geometric.data import Data, Batch
 from configs import *
 import pickle
 
+# for memory usage tracing
+import pynvml
+from threading import Thread, Event
+
 np.random.seed(0)
 torch.manual_seed(0)
 torch.set_printoptions(precision=10)
 
 print_data_loader = True
-
 
 class bcolors:
     HEADER = "\033[95m"
@@ -116,6 +120,30 @@ class EgoNetDataLoader(DataLoader):
             y = self.data.y[node_idx]
             batch_data_list.append(Data(x=x, edge_index=edge_index, y=y))
         return Batch.from_data_list(batch_data_list)
+
+
+def get_gpu_memory_usage():
+    handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # GPU 0
+    info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+    return info.used / 1024**2  # Convert to MiB
+
+class GPUMemoryMonitor(Thread):
+    def __init__(self, sampling_rate=0.1):
+        super().__init__()
+        self.sampling_rate = sampling_rate  # Time between samples in seconds
+        self.done = Event()
+        self.max_memory = 0
+        self.memory_usage = []
+
+    def run(self):
+        while not self.done.is_set():
+            mem_usage = get_gpu_memory_usage()
+            self.memory_usage.append(mem_usage)
+            self.max_memory = max(self.max_memory, mem_usage)
+            time.sleep(self.sampling_rate)
+
+    def stop(self):
+        self.done.set()
 
 
 def group_task_queue(task_q: list) -> dict:

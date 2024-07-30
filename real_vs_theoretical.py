@@ -6,6 +6,120 @@ from GCN import GCN
 import pickle
 
 
+def select_edges_by_degree_with_masks(edge_list, num_indices=100, top_k=10, highest=True):
+    """
+    Select edges connected to the top_k vertices with the highest or lowest degrees and return masks for manipulation.
+
+    Parameters:
+    - edge_list: Tensor of shape (2, num_edges) representing the edge list of the graph.
+    - num_indices: The total number of edge indices to be divided between add and delete masks.
+    - top_k: The number of vertices to consider based on their degree.
+    - highest: If True, select vertices with the highest degrees; otherwise, select those with the lowest degrees.
+
+    Returns:
+    - add_mask: Mask for the first half of randomly selected edges.
+    - delete_mask: Mask for the second half of randomly selected edges.
+    - before_mask: Mask for all edges not included in add_mask.
+    - after_mask: Mask for all edges not included in delete_mask.
+    """
+    # Calculate the degree of each vertex
+    all_vertices = edge_list.flatten()
+    unique_vertices, counts = torch.unique(all_vertices, return_counts=True)
+
+    # Find the top_k vertices based on degree
+    if highest:
+        _, top_vertex_indices = torch.topk(counts, top_k)
+    else:
+        _, top_vertex_indices = torch.topk(counts, top_k, largest=False)
+    top_vertices = unique_vertices[top_vertex_indices]
+
+    # Select edges connected to the top_k vertices
+    mask = torch.any(torch.isin(edge_list, top_vertices).T, dim=1)
+    selected_edges_indices = torch.nonzero(mask).flatten()
+
+    # Shuffle and split the selected indices into add and delete groups
+    shuffled_indices = selected_edges_indices[torch.randperm(len(selected_edges_indices))]
+    split_point = int(num_indices // 2)
+    add_indices = shuffled_indices[:split_point]
+    delete_indices = shuffled_indices[split_point:split_point * 2]  # Ensure this doesn't exceed num_indices
+
+    # Create masks based on the selected indices
+    add_mask = torch.zeros(len(mask), dtype=torch.bool)
+    add_mask[add_indices] = True
+
+    delete_mask = torch.zeros(len(mask), dtype=torch.bool)
+    delete_mask[delete_indices] = True
+
+    # Masks for all edges not included in add and delete masks
+    before_mask = ~add_mask
+    after_mask = ~delete_mask
+
+    return add_mask, delete_mask, before_mask, after_mask
+
+
+def select_edges_by_degree_with_direction_masks(edge_list, num_indices:int=100, top_k=10, highest=True, edge_type='mixed'):
+    """
+    Select edges connected to the top_k vertices with the highest or lowest degrees and return masks for manipulation.
+    Allows selection based on edge direction relative to high-degree vertices.
+
+    Parameters:
+    - edge_list: Tensor of shape (2, num_edges) representing the edge list of the graph.
+    - num_indices: The total number of edge indices to be divided between add and delete masks.
+    - top_k: The number of vertices to consider based on their degree.
+    - highest: If True, select vertices with the highest degrees; otherwise, select those with the lowest degrees.
+    - edge_type: 'incoming', 'outgoing', or 'mixed' edges relative to the top_k vertices.
+
+    Returns:
+    - add_mask, delete_mask, before_mask, after_mask: Masks for edge manipulation.
+    """
+    # Calculate the degree of each vertex based on edge_type
+    if edge_type in ['incoming', 'mixed']:
+        vertex_positions = [1] if edge_type == 'incoming' else [0, 1]
+        vertices_to_consider = torch.cat([edge_list[pos] for pos in vertex_positions])
+    else:  # Outgoing
+        vertices_to_consider = edge_list[0]
+
+    unique_vertices, counts = torch.unique(vertices_to_consider, return_counts=True)
+
+    # Select the top_k vertices based on degree
+    if highest:
+        _, top_vertex_indices = torch.topk(counts, top_k)
+    else:
+        _, top_vertex_indices = torch.topk(counts, top_k, largest=False)
+    top_vertices = unique_vertices[top_vertex_indices]
+
+    # Define a function to test if an edge is connected to top_vertices based on edge_type
+    def is_edge_connected(edge):
+        if edge_type == 'incoming':
+            return torch.isin(edge[1], top_vertices)
+        elif edge_type == 'outgoing':
+            return torch.isin(edge[0], top_vertices)
+        return torch.isin(edge, top_vertices).any()
+
+    # Apply the function to select edges
+    mask = torch.tensor([is_edge_connected(edge) for edge in edge_list.T])
+    selected_edges_indices = torch.nonzero(mask).flatten()
+
+    # Shuffle and split the selected indices into add and delete groups
+    shuffled_indices = selected_edges_indices[torch.randperm(len(selected_edges_indices))]
+    split_point = int(num_indices // 2)
+    add_indices = shuffled_indices[:split_point]
+    delete_indices = shuffled_indices[split_point:split_point * 2]  # Ensure this doesn't exceed num_indices
+
+    # Create masks based on the selected indices
+    add_mask = torch.zeros(len(mask), dtype=torch.bool)
+    add_mask[add_indices] = True
+
+    delete_mask = torch.zeros(len(mask), dtype=torch.bool)
+    delete_mask[delete_indices] = True
+
+    # Masks for edges not included in add and delete masks
+    before_mask = ~add_mask
+    after_mask = ~delete_mask
+
+    return add_mask, delete_mask, before_mask, after_mask
+
+
 def get_direct_affected_tensor(inserted_edges: torch.tensor, removed_edges: torch.tensor) -> set:
     dest_add = torch.unique(inserted_edges[1, :])
     dest_rm = torch.unique(removed_edges[1, :])
@@ -115,7 +229,6 @@ if __name__ == '__main__':
     pbar = tqdm(data_folders)
     total_all_cases = []
     change_all_cases = []
-    notsure_all_cases = []
     case_id = -1
     if use_sampled_graph:
         print("Use saved cases for sampled graphs")
@@ -131,7 +244,7 @@ if __name__ == '__main__':
             with open(edge_dict_file_name, 'wb') as file:
                 pickle.dump(edge_dict_full, file)
 
-    for data_dir in data_folders:
+    for data_dir in data_folders[:100]:
         try:
             if use_sampled_graph:
                 case_id += 1
@@ -173,18 +286,30 @@ if __name__ == '__main__':
                 torch.cuda.empty_cache()
 
             else:
-                indices = torch.randperm(all_edges.size(1))
-                edges_before = all_edges[:, indices[:-batch_size // 2]]
-                inserted_edges = all_edges[:, indices[-batch_size // 2:]]
-                removed_edges = all_edges[:, indices[:batch_size // 2]]
+                # Random select edges
+                # indices = torch.randperm(all_edges.size(1))
+                # edges_before = all_edges[:, indices[:-batch_size // 2]]
+                # inserted_edges = all_edges[:, indices[-batch_size // 2:]]
+                # removed_edges = all_edges[:, indices[:batch_size // 2]]
+                # edges_after = all_edges[:, indices[batch_size // 2:]]
+
+                # Select edges of high-(low-)deg nodes
+                add_mask, delete_mask, before_mask, after_mask = select_edges_by_degree_with_masks(all_edges, args.perbatch, top_k=1000, highest=False)
+                #add_mask, delete_mask, before_mask, after_mask = select_edges_by_degree_with_direction_masks(all_edges,
+                #                                                                                            args.perbatch,
+                #                                                                                             top_k=1000,
+                #                                                                                             highest=False,
+                #                                                                                             edge_type="mixed")
+                edges_before = all_edges[:, before_mask]
+                inserted_edges = all_edges[:, add_mask]
+                edges_after = all_edges[:, after_mask]
+                removed_edges = all_edges[:, delete_mask]
+
                 direct_affected_nodes = get_direct_affected_tensor(inserted_edges, removed_edges)
                 intm_before, affected_before = intm_affected(model, data, edges_before, 2, inserted_edges,
                                                              removed_edges, edge_dict_full)
-                del edges_before
-                edges_after = all_edges[:, indices[batch_size // 2:]]
                 intm_after, affected_after = intm_affected(model, data, edges_after, 2, inserted_edges, removed_edges,
                                                            edge_dict_full)
-                del edges_after
         except torch.cuda.OutOfMemoryError:
             torch.cuda.empty_cache()
             continue
@@ -199,11 +324,9 @@ if __name__ == '__main__':
         print(f"Total/changed: {total_nodes}/{changed}")
         total_all_cases.append(total_nodes)
         change_all_cases.append(changed)
-        notsure_all_cases.append(notsure)
         f.write(
             f"{batch_size}\t{depth}\t{case_id}\t{total_nodes}\t{changed}\n")
     total_all_cases = np.array(total_all_cases)
     change_all_cases = np.array(change_all_cases)
-    notsure_all_cases = np.array(notsure_all_cases)
     f.write(
         f"average real:theoretical = {np.mean(change_all_cases / total_all_cases)}\n")

@@ -135,7 +135,7 @@ def main():
         if args.dataset in ['papers', "products"]:
             num_eval_nodes = 100000
             node_indices = torch.randperm(data.num_nodes)[:num_eval_nodes]
-            loader = data_loader(data, num_layers=2, num_neighbour_per_layer=-1,
+            loader = data_loader(data, num_layers=2, num_neighbour_per_layer=10,
                                  separate=False, input_nodes=node_indices)
             start = time.perf_counter()
             test(model, loader)
@@ -145,9 +145,9 @@ def main():
                 f'Full Graph. Inference time: {(end - start)* (data.num_nodes/num_eval_nodes):.4f} seconds, averaged for {num_eval_nodes} nodes.')
 
         else:
-            loader = data_loader(data, separate=False)
+            loader = data_loader(data, num_layers=2, num_neighbour_per_layer=10, separate=False)
             start = time.perf_counter()
-            num_iter = 5
+            num_iter = 1
             for _ in range(num_iter):
                 test(model, loader)
             end = time.perf_counter()
