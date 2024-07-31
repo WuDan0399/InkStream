@@ -15,7 +15,8 @@ from torch.multiprocessing import Pool
 import concurrent.futures
 
 class inkstream:
-    def __init__(self, model, folder: str = "", aggregator: str = "min", verify: bool = False, verification_tolerance: float = 1e-6, out_channels:int = 1, ego_net: bool = False, multi_thread: int = 0):
+    def __init__(self, model, folder: str = "", aggregator: str = "min", verify: bool = False,
+                 verification_tolerance: float = 1e-6, out_channels:int = 1):
         self.model = model
         self.folder = folder
         self.aggregator = aggregator
@@ -23,20 +24,11 @@ class inkstream:
         self.verify = verify
         self.verification_tolerance = verification_tolerance
         self.out_channels = out_channels
-        self.ego_net = ego_net
-        self.multi_thread = multi_thread
 
         self.event_dict = {} 
-        self.fetched_nodes = None  
-
+        self.fetched_nodes = None
         self.nlayer = count_layers(self.model)
 
-        if self.multi_thread > 0:
-            print(f"Use {self.multi_thread} threads.")
-            mp.set_start_method('spawn')
-            self.model.share_memory()
-        else:
-            print("Use single thread.")
 
     @torch.no_grad()
     def user_apply(self, events: dict, base_value: torch.Tensor, intm_initial: dict = None, it_layer: int = 0, node: int = -1):
@@ -110,7 +102,6 @@ class inkstream:
         final_out_edge_dict = to_dict_wiz_cache(final_edges, data_dir, f'final_out_edge_dict.pickle')
         final_in_edge_dict = to_dict_wiz_cache(final_edges[[1, 0], :], data_dir, f"final_in_edge_dict.pickle")
         # del final_edges
-        
 
         initial_edges = torch.load(osp.join(data_dir, "initial_edges.pt"))
         init_out_edge_dict = to_dict_wiz_cache(initial_edges, data_dir, f'init_out_edge_dict.pickle')
@@ -243,16 +234,11 @@ class inkstream:
         return changed, changed_aggred_dst, condition
 
     @torch.no_grad()
-    def incremental_inference_st(self, initial_out_edge_dict: dict, initial_in_edge_dict: dict, current_out_edge_dict: dict, current_in_edge_dict: dict, intm_initial: dict, inserted_edges: list, removed_edges: list):
+    def incremental_inference(self, initial_out_edge_dict: dict, initial_in_edge_dict: dict, current_out_edge_dict: dict, current_in_edge_dict: dict, intm_initial: dict, inserted_edges: list, removed_edges: list):
         self.model.eval()
         event_q, event_q_bkp = EventQueue(), EventQueue()
 
         start = time.perf_counter()
-
-        # pynvml.nvmlInit()
-        # # Start monitoring GPU memory
-        # monitor = GPUMemoryMonitor()
-        # monitor.start()
 
         self.create_events_for_changed_edges(event_q, inserted_edges, removed_edges, intm_initial["layer1"]["before"])
         self.event_dict = event_q.reduce(
@@ -330,18 +316,12 @@ class inkstream:
                 self.event_dict = event_q.reduce(
                     self.monotonic_aggregator, self.accumulative_aggregator, self.user_reducer)
 
-        # Stop monitoring GPU memory
-        # monitor.stop()
-        # monitor.join()  # Wait for the monitoring thread to finish
-        # print(f"Maximum GPU Memory Usage: {monitor.max_memory} MiB")
-        # print(f"Memory Usage Over Time: {monitor.memory_usage}")
-
         end = time.perf_counter()
 
         return cnt_dict, end - start
 
     @torch.no_grad()
-    def batch_incremental_inference(self, data, niters:int=10):
+    def batch_incremental_inference(self, data, niters:int=1):
         t_distribution = []
         condition_distribution = defaultdict(list)
         entries = os.listdir(self.folder)
@@ -354,7 +334,7 @@ class inkstream:
         for data_dir in tqdm(data_folders[:niters]):
             _, inserted_edges, removed_edges, init_in_edge_dict, init_out_edge_dict, final_in_edge_dict, final_out_edge_dict, intm_initial = self.load_context(
                 osp.join(self.folder, data_dir), data)
-            cnt_dict, t_inc = self.incremental_inference_st(
+            cnt_dict, t_inc = self.incremental_inference(
                 init_out_edge_dict, init_in_edge_dict, final_out_edge_dict, final_in_edge_dict, intm_initial, inserted_edges, removed_edges)
             t_distribution.append(t_inc)
 
@@ -366,43 +346,3 @@ class inkstream:
                 np.save(f"tmp_GIN_layer{it_layer}.npy",condition_distribution[it_layer])
 
         return condition_distribution, t_distribution
-
-    @torch.no_grad()
-    def incremental_layer(self, operations_in_layer, it_layer, destination, current_in_edge_dict, intm_initial):
-        try:
-            aggr_changed, changed_aggred_dst, condition = self.incremental_aggregation_mono(
-                self.event_dict[destination], it_layer + 1, destination, current_in_edge_dict, intm_initial)
-        except Exception as e:
-            print(e)
-
-        if not aggr_changed and "user" not in self.event_dict[destination]:
-            return False, False, None, None, condition
-        else:
-            changed_aggred_dst_copy = None
-            if not aggr_changed:
-                changed_aggred_dst = intm_initial[f"layer{it_layer+1}"]["after"][
-                    destination
-                ]
-            else:
-                changed_aggred_dst_copy = changed_aggred_dst.clone()
-            next_layer_before_aggregation = changed_aggred_dst.unsqueeze(
-                0).to(device)
-            for model_operation in operations_in_layer[1:]:
-                if model_operation == "user_apply":
-                    next_layer_before_aggregation = (
-                        next_layer_before_aggregation.squeeze())
-                    try:
-                        next_layer_before_aggregation = self.user_apply(
-                            self.event_dict[destination], next_layer_before_aggregation, intm_initial, it_layer, destination)
-                    except Exception as e:
-                        print(e)
-
-                    next_layer_before_aggregation = (
-                        next_layer_before_aggregation.unsqueeze(0))
-                elif isinstance(model_operation, Callable):
-                    next_layer_before_aggregation = model_operation(
-                        next_layer_before_aggregation)
-                else:
-                    print("Unrecognized operation: ", model_operation)
-            efore_aggregation = next_layer_before_aggregation.squeeze().to("cpu")
-            return True, aggr_changed, next_layer_before_aggregation, changed_aggred_dst_copy, condition

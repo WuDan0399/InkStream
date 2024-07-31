@@ -60,8 +60,6 @@ class FakeArgs:
         stream="add",
         interval=5000000,
         it=0,
-        binary=False,
-        mt=0,
         range="affected",
         loader="default",
     ):
@@ -75,51 +73,10 @@ class FakeArgs:
         self.stream = stream
         self.interval = interval
         self.it = it
-        self.binary = binary
         self.patience = patience
         self.epochs = epochs
-        self.mt = mt
         self.range = range
         self.loader = loader
-
-class EgoNetDataLoader(DataLoader):
-    def __init__(
-        self,
-        data,
-        node_indices,
-        batch_size,
-        k=5,
-        num_workers=0,
-        persistent_workers=False,
-    ):
-        self.data = data
-        self.node_indices = node_indices
-        self.batch_size = batch_size
-        self.k = k
-        super().__init__(
-            node_indices,
-            batch_size=batch_size,
-            collate_fn=self.collate_fn,
-            num_workers=num_workers,
-            persistent_workers=persistent_workers,
-        )
-
-    def collate_fn(self, batch_node_indices):
-        batch_data_list = []
-        for node_idx in batch_node_indices:
-            subset, edge_index, _, _ = k_hop_subgraph(
-                node_idx.item(),
-                self.k,
-                self.data.edge_index,
-                relabel_nodes=True,
-                num_nodes=None,
-                flow="target_to_source",
-                directed=False,
-            )
-            x = self.data.x[subset]
-            y = self.data.y[node_idx]
-            batch_data_list.append(Data(x=x, edge_index=edge_index, y=y))
-        return Batch.from_data_list(batch_data_list)
 
 
 def get_gpu_memory_usage():
@@ -146,24 +103,6 @@ class GPUMemoryMonitor(Thread):
         self.done.set()
 
 
-def group_task_queue(task_q: list) -> dict:
-    result = {}
-    task_q_sorted = sorted(
-        task_q, key=attrgetter("dst", "op")
-    )
-    for dst, tasks_in_dst in groupby(task_q_sorted, key=attrgetter("dst")):
-        result[dst] = {
-            op: [(task.src, task.msg) for task in tasks]
-            for op, tasks in groupby(tasks_in_dst, key=attrgetter("op"))
-        }
-    return result
-
-
-def print_task_queue(task_q):
-    for task in task_q:
-        print(f"<{task.op}, {task.src}, {task.dst}, {task.msg.shape}>")
-
-
 def replace_arrays_with_shape_and_type(**kwargs):
     """
     For meature_time decorator, in case one of the argument is a tensor\array,
@@ -177,11 +116,6 @@ def replace_arrays_with_shape_and_type(**kwargs):
         elif isinstance(value, torch.Tensor):
             kwargs[key] = f"torch.Tensor, shape: {value.shape}, dtype: {value.dtype}"
     return kwargs
-
-
-def sync(device):
-    if device == "cuda":
-        torch.cuda.synchronize()  
 
 
 # decorator
@@ -358,17 +292,6 @@ def general_parser(parser: argparse.ArgumentParser) -> argparse.Namespace:
     parser.add_argument("--patience", type=int, default=50)
     parser.add_argument("--use_gdc", action="store_true", help="Use GDC")
     parser.add_argument("--mode",type=str, default="mixed", help="for dgl train mode")
-    parser.add_argument(
-        "--binary",
-        action="store_true",
-        help="Use one-hot encoding of node degree as node attribute, fake labels of ego networks are generated",
-    )
-    parser.add_argument(
-        "--distribution",
-        default="random",
-        type=str,
-        help="distribution of edges in one batch (random/burst/combine)",
-    )
     parser.add_argument("-l", "--nlayers", default=5,
                         type=int, help="number of layers")
     parser.add_argument(
@@ -419,12 +342,6 @@ def general_parser(parser: argparse.ArgumentParser) -> argparse.Namespace:
         default="default",
         type=str,
         help="loader to use, pyg.Neighborloader by default [default/quiver]",
-    )
-    parser.add_argument(
-        "--mt",
-        default=0,
-        type=int,
-        help="threads in multi-threading, 0 for single thread (default)",
     )
     parser.add_argument(
         "--id",
@@ -542,81 +459,6 @@ def affected_nodes_each_layer(
     return affected
 
 
-def unique_and_location(
-    array: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray]: 
-    indices_dict = {}
-
-    for idx, element in np.ndenumerate(array):
-        if element not in indices_dict:
-            indices_dict[element] = [idx[0]]
-        else:
-            indices_dict[element].append(idx[0])
-
-    unique_elements = np.array(list(indices_dict.keys()))
-    element_locations = list(indices_dict.values())
-
-    return unique_elements, element_locations
-
-
-def partition_by_aggregation_phase(
-    model_configs: List[str], aggr: str
-) -> List[List[str]]:
-    sublists = []
-    sublist = []
-    for idx, elem in enumerate(model_configs):
-        if elem == aggr:
-            if sublist:
-                sublists.append(sublist)
-            sublist = [elem]
-        else:
-            sublist.append(elem)
-        if idx == len(model_configs) - 1:
-            sublists.append(sublist)
-    if (
-        sublists[0][0] != aggr
-    ): 
-        sublists.pop(0)
-    return sublists
-
-
-def edge_remove(
-    full_edges: np.ndarray, batch_size: int, distribution: str, directed: bool = False
-) -> Tuple[np.ndarray, np.ndarray]:
-    num_edges = full_edges.shape[1]
-    num_edge_changed = (
-        2 * batch_size if directed else batch_size
-    )
-
-    if distribution == "random":
-        index_added_edges = np.random.choice(
-            num_edges, num_edge_changed, replace=False)
-    elif distribution == "burst":
-        index_added_edges = burst_sampler(full_edges, num_edge_changed)
-    elif distribution == "combine":
-        print("Combined sampling is not implemented yet. Use random instead")
-        index_added_edges = np.random.choice(
-            num_edges, num_edge_changed, replace=False)
-
-    if not directed:
-        index_augmented = []
-        for index in index_added_edges:
-            the_other_direction = np.flip(full_edges[:, index])
-            for x in range(full_edges.shape[1]):
-                if np.all(full_edges[:, x] == the_other_direction):
-                    index_augmented.append(x)
-        index_augmented = np.sort(
-            np.concatenate((index_added_edges, np.array(index_augmented)))
-        )
-
-    sample_edges = np.transpose(
-        full_edges[:, index_added_edges])
-    edges_one_batch_missing = full_edges[
-        :, np.setdiff1d(np.arange(num_edges), index_augmented)
-    ]
-
-    return sample_edges, edges_one_batch_missing
-
 def get_graph_dynamics(
     tensor: torch.Tensor, batch_size: int, stream: str = "mix"
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -661,26 +503,6 @@ def is_large(data):
     return True if data.num_nodes > 50000 else False
 
 
-def concate_by_id(
-    full: np.ndarray, batch: np.ndarray, position: np.ndarray
-) -> np.ndarray:
-    batch_size = len(batch)
-    full_size = len(full)
-
-    if np.array_equal(position, np.arange(full_size, full_size + batch_size)):
-        full = np.concatenate((full, batch), axis=0) if len(
-            full) != 0 else batch
-
-    else: 
-        if np.max(position) >= full_size:
-            extended = np.zeros((np.max(position) + 1, full.shape[1]))
-            extended[: full.shape[0]] = full
-            full = extended
-        full[position] = batch
-
-    return full
-
-
 def create_directory(path): 
     try:
         os.makedirs(path)
@@ -709,10 +531,3 @@ def to_dict(edges: torch.Tensor):
 
 def get_stacked_tensors_from_dict(dictionary: dict, ids):
     return torch.stack([dictionary[id] for id in ids])
-
-
-def get_open_fds():
-    pid = os.getpid()
-    output = subprocess.check_output(['lsof', '-p', str(pid)])
-    lines = output.decode().strip().split('\n')
-    return len(lines) - 1

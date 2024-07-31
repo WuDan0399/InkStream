@@ -4,7 +4,6 @@ batch_accuracy
 examples
 obsolete
 theoretical_result
-run_commands.py
 command*
 *.log
 *.sh

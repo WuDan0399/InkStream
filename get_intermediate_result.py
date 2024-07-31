@@ -1,10 +1,3 @@
-#  NOTE: run with gnnEnv conda env!
-#################################################################################
-#  Original Code from:
-#  https://github.com/pyg-team/pytorch_geometric/blob/master/examples/gcn.py
-#  Data Loader from:
-#  https://github.com/pyg-team/pytorch_geometric/blob/master/examples/hetero/to_hetero_mag.py
-#################################################################################
 import random
 
 from tqdm import tqdm
@@ -38,22 +31,6 @@ def inference_for_intermediate_result(model, loader, save_dir:str = "", postfix:
                 else:
                     intermediate_result_each_layer[layer]['a'] = batch_intermediate_result_per_layer[layer]["a"][:batch_size].cpu()
 
-    elif isinstance(loader, EgoNetDataLoader):
-        for batch in tqdm(loader):
-            batch = batch.to(device)
-            _, _, batch_intermediate_result_per_layer = model(batch.x, batch.edge_index, batch.batch, batch.ptr)
-            for layer in batch_intermediate_result_per_layer :
-                if len(intermediate_result_each_layer[layer]['a-']) != 0:
-                    intermediate_result_each_layer[layer]['a-'] = torch.concat((intermediate_result_each_layer[layer]["a-"],
-                                                        batch_intermediate_result_per_layer[layer]["a-"].cpu()))
-                else:
-                    intermediate_result_each_layer[layer]['a-'] = batch_intermediate_result_per_layer[layer]["a-"].cpu()
-
-                if len(intermediate_result_each_layer[layer]['a']) != 0:
-                    intermediate_result_each_layer[layer]['a'] = torch.concat((intermediate_result_each_layer[layer]["a"],
-                                                        batch_intermediate_result_per_layer[layer]["a"].cpu()))
-                else:
-                    intermediate_result_each_layer[layer]['a'] = batch_intermediate_result_per_layer[layer]["a"].cpu()
 
     if save_dir != "":
         for layer in intermediate_result_each_layer:

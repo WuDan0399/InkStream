@@ -134,6 +134,7 @@ if __name__ == '__main__':
                     len(re.findall("[0-9]\.[0-9]+", model_name)) != 0]
         index_best_model = np.argmax(accuracy)
 
+        # sample some nodes to estimate the inference time for the whole graph.
         threshold = 200000
         num_eval_nodes = data.num_nodes
         if data.num_nodes>threshold:
