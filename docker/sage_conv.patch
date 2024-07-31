@@ -1,0 +1,46 @@
+--- sage_conv_ori.py	2024-07-31 16:24:36.342428709 +0000
++++ sage_conv.py	2024-07-31 16:27:52.990052648 +0000
+@@ -71,6 +71,7 @@
+         normalize: bool = False,
+         root_weight: bool = True,
+         project: bool = False,
++        save_intermediate=False, #InkStream Patch
+         bias: bool = True,
+         **kwargs,
+     ):
+@@ -79,6 +80,8 @@
+         self.normalize = normalize
+         self.root_weight = root_weight
+         self.project = project
++
++        self.save_intermediate = save_intermediate  #InkStream Patch
+
+         if isinstance(in_channels, int):
+             in_channels = (in_channels, in_channels)
+@@ -129,9 +132,17 @@
+
+         if self.project and hasattr(self, 'lin'):
+             x = (self.lin(x[0]).relu(), x[1])
++
++        intermediate_result = {} #InkStream Patch
++        if not self.training and self.save_intermediate:  #InkStream Patch
++            intermediate_result["a-"] = x[0].detach()
+
+         # propagate_type: (x: OptPairTensor)
+         out = self.propagate(edge_index, x=x, size=size)
++
++        if not self.training and self.save_intermediate:  #InkStream Patch
++            intermediate_result["a"] = out.detach()
++
+         out = self.lin_l(out)
+
+         x_r = x[1]
+@@ -141,7 +152,7 @@
+         if self.normalize:
+             out = F.normalize(out, p=2., dim=-1)
+
+-        return out
++        return out, intermediate_result  #InkStream Patch
+
+     def message(self, x_j: Tensor) -> Tensor:
+         return x_j

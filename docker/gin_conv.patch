@@ -1,0 +1,45 @@
+--- gin_conv_ori.py	2024-07-31 16:28:05.702803897 +0000
++++ gin_conv.py	2024-07-31 16:30:46.620322883 +0000
+@@ -54,8 +54,8 @@
+           :math:`(|\mathcal{V}_t|, F_{out})` if bipartite
+     """
+     def __init__(self, nn: Callable, eps: float = 0., train_eps: bool = False,
+-                 **kwargs):
+-        kwargs.setdefault('aggr', 'add')
++                 save_intermediate=False, **kwargs):
++        kwargs.setdefault('aggr', 'max')
+         super().__init__(**kwargs)
+         self.nn = nn
+         self.initial_eps = eps
+@@ -64,6 +64,7 @@
+         else:
+             self.register_buffer('eps', torch.empty(1))
+         self.reset_parameters()
++        self.save_intermediate = save_intermediate  #InkStream Patch
+
+     def reset_parameters(self):
+         super().reset_parameters()
+@@ -79,15 +80,22 @@
+
+         if isinstance(x, Tensor):
+             x = (x, x)
++
++        intermediate_result = {}  #InkStream Patch
++        if not self.training and self.save_intermediate:  #InkStream Patch
++            intermediate_result["a-"] = x[0].detach()  #InkStream Patch
+
+         # propagate_type: (x: OptPairTensor)
+         out = self.propagate(edge_index, x=x, size=size)
+
++        if not self.training and self.save_intermediate: #InkStream Patch
++            intermediate_result["a"] = out.detach() #InkStream Patch
++
+         x_r = x[1]
+         if x_r is not None:
+             out = out + (1 + self.eps) * x_r
+
+-        return self.nn(out)
++        return self.nn(out), intermediate_result #InkStream Patch
+
+     def message(self, x_j: Tensor) -> Tensor:
+         return x_j

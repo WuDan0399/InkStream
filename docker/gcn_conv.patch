@@ -1,0 +1,47 @@
+--- gcn_conv_ori.py	2024-07-31 16:18:52.066157227 +0000
++++ gcn_conv.py	2024-07-31 16:24:26.409841936 +0000
+@@ -184,6 +184,7 @@
+         add_self_loops: Optional[bool] = None,
+         normalize: bool = True,
+         bias: bool = True,
++        save_intermediate = False, #InkStream Patch
+         **kwargs,
+     ):
+         kwargs.setdefault('aggr', 'add')
+@@ -206,7 +207,9 @@
+
+         self._cached_edge_index = None
+         self._cached_adj_t = None
+-
++
++        self.save_intermediate = save_intermediate #InkStream Patch
++
+         self.lin = Linear(in_channels, out_channels, bias=False,
+                           weight_initializer='glorot')
+
+@@ -256,16 +259,24 @@
+                         self._cached_adj_t = edge_index
+                 else:
+                     edge_index = cache
++
++        intermediate_result = {} #InkStream Patch
+
+         x = self.lin(x)
++
++        if not self.training and self.save_intermediate:  #InkStream Patch
++            intermediate_result["a-"] = x.detach()
+
+         # propagate_type: (x: Tensor, edge_weight: OptTensor)
+         out = self.propagate(edge_index, x=x, edge_weight=edge_weight)
++
++        if not self.training and self.save_intermediate:  #InkStream Patch
++            intermediate_result["a"] = out.detach()
+
+         if self.bias is not None:
+             out = out + self.bias
+
+-        return out
++        return out, intermediate_result  #InkStream Patch
+
+     def message(self, x_j: Tensor, edge_weight: OptTensor) -> Tensor:
+         return x_j if edge_weight is None else edge_weight.view(-1, 1) * x_j
