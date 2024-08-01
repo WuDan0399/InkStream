@@ -1,5 +1,5 @@
 # Preparation:
-1. conda environment: baseline and modified.
+1. Create docker container with conda environments: baseline and inkstream.
     cd docker
     docker build -t inkstream_image .
     docker run --name inkstream_container --gpus all -it inkstream_image

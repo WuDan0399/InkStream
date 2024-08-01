@@ -95,13 +95,8 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
-    available_model = []
-    name_prefix = f"{args.dataset}_SAGE_{args.aggr}"
-    for file in os.listdir("examples/trained_model"):
-        if re.match(name_prefix + "_[0-9]+_[0-9]\.[0-9]+\.pt", file):
-            available_model.append(file)
-
-    if len(available_model) == 0:
+    model_name = f"{args.dataset}_SAGE_{args.aggr}.pt"
+    if not os.path.exists(osp.join("examples", "trained_model", model_name)):  # no available model, train from scratch
         best_test_acc = 0
         best_loss = torch.nan
         best_model_state_dict = None
@@ -109,6 +104,7 @@ def main():
         it_patience = 0
         train_loader, val_loader, test_loader = data_loader(data, num_layers=2, num_neighbour_per_layer=10,
                                                             separate=True)
+        epoch = 0
         for epoch in range(1, args.epochs + 1):
             loss = train(model, train_loader, optimizer, epoch)
             print(f'Epoch {epoch:02d}, Loss: {loss:.4f}')
@@ -124,14 +120,10 @@ def main():
                     print(
                         f"No accuracy improvement {best_loss} in {patience} epochs. Early stopping.")
                     break
-        save(best_model_state_dict, epoch, best_loss, name_prefix)
+        save(best_model_state_dict, epoch, best_loss, model_name)
 
     else: 
-        accuracy = [float(re.findall("[0-9]\.[0-9]+", model_name)[0]) for model_name in available_model if
-                    len(re.findall("[0-9]\.[0-9]+", model_name)) != 0]
-        index_best_model = np.argmax(accuracy)
-        model = load(model, available_model[index_best_model])
-
+        model = load(model, model_name)
         if args.dataset in ['papers', "products"]:
             num_eval_nodes = 100000
             node_indices = torch.randperm(data.num_nodes)[:num_eval_nodes]

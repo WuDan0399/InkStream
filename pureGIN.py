@@ -91,13 +91,9 @@ if __name__ == '__main__':
     data = dataset[0]
     timing_sampler(data, args)
 
-    available_model = []
-    name_prefix = f"{args.dataset}_GIN_{args.aggr}"
-    for file in os.listdir("examples/trained_model"):
-        if re.match(name_prefix + "_[0-9]+_[0-9]\.[0-9]+\.pt", file):
-            available_model.append(file)
-
-    if len(available_model) == 0:  # no available model, train from scratch
+    model_name = f"{args.dataset}_GIN_{args.aggr}.pt"
+    if not os.path.exists(osp.join("examples", "trained_model", model_name)):  # no available model, train from scratch
+        print(f"No model available for GIN {args.dataset} {args.aggr}.")
         best_test_acc = 0
         best_model_state_dict = None
         patience = args.patience
@@ -112,6 +108,7 @@ if __name__ == '__main__':
             model = pureGIN(sample_batch.x.shape[1], dataset.num_classes, args).to(device)
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
+        epoch = 0
         for epoch in range(1, args.epochs + 1):
             loss = train(model, train_loader, optimizer)
             test_acc = test(model, test_loader)
@@ -127,13 +124,9 @@ if __name__ == '__main__':
                     print(
                         f"No accuracy improvement {best_test_acc} in {patience} epochs. Early stopping.")
                     break
-        save(best_model_state_dict, epoch, best_test_acc, name_prefix)
+        save(best_model_state_dict, epoch, best_test_acc, model_name)
     else:
         timing_sampler(data, args)
-        accuracy = [float(re.findall("[0-9]\.[0-9]+", model_name)[0]) for model_name in available_model if
-                    len(re.findall("[0-9]\.[0-9]+", model_name)) != 0]
-        index_best_model = np.argmax(accuracy)
-
         # sample some nodes to estimate the inference time for the whole graph.
         threshold = 200000
         num_eval_nodes = data.num_nodes
@@ -151,7 +144,7 @@ if __name__ == '__main__':
             model = pureGIN(sample_batch.x.shape[1], dataset.num_classes + 1, args).to(device)
         else:
             model = pureGIN(sample_batch.x.shape[1], dataset.num_classes, args).to(device)
-        model = load(model, available_model[index_best_model])
+        model = load(model, model_name)
 
         start = time.perf_counter()
         test(model, loader)

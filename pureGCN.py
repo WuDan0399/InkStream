@@ -3,6 +3,8 @@
 #  Original Code from:
 #  https://github.com/pyg-team/pytorch_geometric/blob/master/examples/gcn.py
 #################################################################################
+import os.path
+
 from torch_geometric.nn import GCNConv
 
 from utils import *
@@ -63,22 +65,12 @@ def main():
     else:
         model = pureGCN(dataset.num_features, 256, dataset.num_classes, args).to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
-
-    available_model = []
-    name_prefix = f"{args.dataset}_GCN_{args.aggr}"
-    for file in os.listdir("examples/trained_model"):
-        if re.match(name_prefix + "_[0-9]+_[0-1]\.[0-9]+\.pt", file):
-            available_model.append(file)
-
-    if len(available_model) == 0:  # no available model, train from scratch
+    model_name = f"{args.dataset}_GCN_{args.aggr}.pt"
+    if not os.path.exists(osp.join("examples", "trained_model", model_name)):  # no available model, train from scratch
         print(f"No model available for GCN {args.dataset} {args.aggr}.")
 
     else:  # choose the model with the highest test acc
-        accuracy = [float(re.findall("[0-1]\.[0-9]+", model_name)[0]) for model_name in available_model if
-                    len(re.findall("[0-1]\.[0-9]+", model_name)) != 0]
-        index_best_model = np.argmax(accuracy)
-        model = load(model, available_model[index_best_model])
+        model = load(model, model_name)
         loader = data_loader(data, separate=False, num_layers=2, num_neighbour_per_layer=10,)
         start = time.perf_counter()
         num_iter = 5  # 5 in submitted version
