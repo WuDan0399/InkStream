@@ -7,7 +7,7 @@ def generate_snapshots(data:Data, dataset_name:str, stream:str, args:argparse.Na
     timing_sampler(data, args)
     exist = True
     for batch_size in batch_sizes:
-        if not osp.exists(osp.join(root, "dynamic", "examples", "intermediate", dataset_name, "min", "add",
+        if not osp.exists(osp.join(root, "examples", "intermediate", dataset_name, "min", "add",
                                    f"batch_size_{batch_size}", str(0))):
             exist = False
             break
@@ -15,13 +15,13 @@ def generate_snapshots(data:Data, dataset_name:str, stream:str, args:argparse.Na
         return
 
     for batch_size, num_sample in zip(batch_sizes, num_samples):
-        if osp.exists(osp.join(root, "dynamic", "examples", "intermediate", dataset_name, "min", stream,
+        if osp.exists(osp.join(root, "examples", "intermediate", dataset_name, "min", stream,
                                    f"batch_size_{batch_size}", str(0))):
             continue
 
         print(f"Generating graph topology snapshots for batch size {batch_size}, sample {num_sample}.")
         for i in range(num_sample):
-            out_folder = osp.join(root, "dynamic", "examples", "intermediate", dataset_name, "min", stream,
+            out_folder = osp.join(root, "examples", "intermediate", dataset_name, "min", stream,
                               f"batch_size_{batch_size}", str(i))
             create_directory(out_folder)
             # edge selection

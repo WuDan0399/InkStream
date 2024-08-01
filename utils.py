@@ -144,8 +144,7 @@ def save(model_state_dict, epoch, acc, name) -> None:
 
 def load(model, file_name: str):
     print(f"Loading model {file_name} ...")
-    model_path = osp.join(root, "dynamic", "examples",
-                          "trained_model", file_name)
+    model_path = osp.join(root, "examples", "trained_model", file_name)
     model.load_state_dict(torch.load(model_path, map_location=device))
     return model
 
@@ -156,8 +155,7 @@ def clean(files: list) -> None:
     else:
         print(f"Useless models found, cleaning {files}.")
         for file in files:
-            os.remove(osp.join(root, "dynamic",
-                      "examples", "trained_model", file))
+            os.remove(osp.join(root, "examples", "trained_model", file))
 
 
 def load_tensors_to_dict(root: str, skip: int = 5, postfix: str = "_initial.pt"):
@@ -400,7 +398,7 @@ def timing_sampler(data: pyg.data.Data, args):
 
 def load_available_model(model, args: argparse.Namespace):
     model_name = f"{args.dataset}_{args.model}_{args.aggr}.pt"
-    if not os.path.exists(osp.join("examples", "trained_model", model_name)):  # no available model, train from scratch
+    if not os.path.exists(osp.join(root, "examples", "trained_model", model_name)):  # no available model, train from scratch
         print(f"No available model. Please run `python {args.model}.py --dataset {args.dataset} --aggr {args.aggr}`")
         return None
     model = load(model, model_name)

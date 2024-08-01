@@ -72,7 +72,7 @@ def main():
 
     starter = inkstream_gcn(model, intr_result_dir, aggregator=args.aggr, verify=False, out_channels=out_channels)
     _, exec_time_dist = starter.batch_incremental_inference(data)
-    print("Execution time of InkStream for each sample is:")
+    print("Execution time (s) of InkStream for each sample is:")
     print(exec_time_dist)
 
 
