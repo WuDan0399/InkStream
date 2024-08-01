@@ -13,8 +13,6 @@ class inkstream_gcn(inkstream):
         verify: bool = False,
         verification_tolerance: float = 1e-5,
         out_channels:int = 1,
-        ego_net: bool = False,
-        multi_thread: int = 0
     ):
         super().__init__(
             model,
@@ -23,8 +21,6 @@ class inkstream_gcn(inkstream):
             verify,
             verification_tolerance,
             out_channels,
-            ego_net,
-            multi_thread,
         )
         self.model_config = [
             [self.aggregator, self.conv1_bias, self.conv2],

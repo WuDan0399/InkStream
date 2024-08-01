@@ -3,8 +3,8 @@ import os
 
 
 class defaultConfigs:
-    batch_sizes = [1, 10, 100, 1000, 10000]
-    num_samples = [100, 100, 10, 10, 1]
+    batch_sizes = [100] #[1, 10, 100, 1000, 10000]
+    num_samples = [1] #[100, 100, 10, 10, 1]
 
 loader_configs = {
     "batch_size": 16,
