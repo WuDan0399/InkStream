@@ -399,7 +399,7 @@ def timing_sampler(data: pyg.data.Data, args):
 
 
 def load_available_model(model, args: argparse.Namespace):
-    model_name = f"{args.dataset}_{args.model}_{args.aggr}"
+    model_name = f"{args.dataset}_{args.model}_{args.aggr}.pt"
     if not os.path.exists(osp.join("examples", "trained_model", model_name)):  # no available model, train from scratch
         print(f"No available model. Please run `python {args.model}.py --dataset {args.dataset} --aggr {args.aggr}`")
         return None
