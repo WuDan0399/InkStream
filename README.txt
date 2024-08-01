@@ -1,11 +1,8 @@
 # Preparation:
 1. conda environment: baseline and modified.
-        baseline: change aggr parameter in __init__ function to "min" for SAGEConv and 'max' for GINConv
-        modifed: a. change aggr parameter in __init__ function same as baseline
-                 b. add save_int parameter in __init__ to save intermediate values
-                 c. add code to save and return intermediate values when not training and save_int==True
-2. To use multi-threading (--mt n), do `ulimit 4096` first to avoid potential error of `OSError: [Errno 24] Too many open files`.
-
+    cd docker
+    docker build -t inkstream_image .
+    docker run --name inkstream_container --gpus all -it inkstream_image
 
 GCN.py [baselinePyG]
     # patience epochs interval #

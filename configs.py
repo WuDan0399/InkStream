@@ -10,7 +10,7 @@ loader_configs = {
     "batch_size": 16,
     "num_workers": 4,
 }
-# root = os.getenv("DYNAMIC_GNN_ROOT")
-root = "/home/dan/GNN/"
+root = os.getenv("DYNAMIC_GNN_ROOT")
+# root = "/home/dan/GNN/"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.autograd.set_detect_anomaly(True)
