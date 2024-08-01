@@ -399,29 +399,11 @@ def timing_sampler(data: pyg.data.Data, args):
 
 
 def load_available_model(model, args: argparse.Namespace):
-    available_model = []
-    if args.dataset in ["cora", "yelp", "reddit", "PubMed", "amazon", "products", "papers"]:
-        name_prefix = f"{args.dataset}_{args.model}_{args.aggr}"
-    else:
-        name_prefix = f"{args.dataset}_{args.model}_{args.aggr}_lp"
-    for file in os.listdir("examples/trained_model"):
-        if re.match(name_prefix + "_[0-9]+_[0-9]\.[0-9]+\.pt", file):
-            available_model.append(file)
-    if len(available_model) == 0:  # no available model, train from scratch
-        print(
-            f"No available model. Please run `python {args.model}.py --dataset {args.dataset} --aggr {args.aggr}`"
-        )
+    model_name = f"{args.dataset}_{args.model}_{args.aggr}"
+    if not os.path.exists(osp.join("examples", "trained_model", model_name)):  # no available model, train from scratch
+        print(f"No available model. Please run `python {args.model}.py --dataset {args.dataset} --aggr {args.aggr}`")
         return None
-
-    # choose the model with the highest test acc
-    accuracy = [
-        float(re.findall("[0-9]\.[0-9]+", model_name)[0])
-        for model_name in available_model
-        if len(re.findall("[0-9]\.[0-9]+", model_name)) != 0
-    ]
-    index_best_model = np.argmax(accuracy)
-    model = load(model, available_model[index_best_model])
-
+    model = load(model, model_name)
     return model
 
 
