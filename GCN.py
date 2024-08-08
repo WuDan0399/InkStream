@@ -101,15 +101,10 @@ def main():
     optimizer = torch.optim.Adam([
         dict(params=model.conv1.parameters(), weight_decay=5e-4),
         dict(params=model.conv2.parameters(), weight_decay=0)
-    ], lr=args.lr)  
+    ], lr=args.lr)
 
-    available_model = []
-    name_prefix = f"{args.dataset}_GCN_{args.aggr}"
-    for file in os.listdir("examples/trained_model"):
-        if re.match(name_prefix + "_[0-9]+_[0-1]\.[0-9]+\.pt", file):
-            available_model.append(file)
-
-    if len(available_model) == 0:  # no available model, train from scratch
+    model_name = f"{args.dataset}_GCN_{args.aggr}_{args.hidden_channels}.pt"
+    if not os.path.exists(osp.join("examples", "trained_model", model_name)):  # no available model, train from scratch
         best_test_acc = 0
         best_model_state_dict = None
         patience = args.patience
@@ -129,20 +124,16 @@ def main():
                         f"No accuracy improvement {best_test_acc} in {patience} epochs. Early stopping."
                     )
                     break
-        save(best_model_state_dict, epoch, best_test_acc, name_prefix)
+        torch.save(
+            best_model_state_dict,
+            osp.join("examples/trained_model", model_name),
+        )
 
     else:  # choose the model with the highest test acc
-        accuracy = [
-            float(re.findall("[0-1]\.[0-9]+", model_name)[0])
-            for model_name in available_model
-            if len(re.findall("[0-1]\.[0-9]+", model_name)) != 0
-        ]
-        index_best_model = np.argmax(accuracy)
-        model = load(model, available_model[index_best_model])
+        model = load(model, model_name)
         train_acc, val_acc, test_acc = test(model, data)
         print(f"Test: {test_acc:.4f}")
 
-        available_model.pop(index_best_model)
 
 
 if __name__ == "__main__":

@@ -98,13 +98,13 @@ def inference_affected(data, model, edge_dict: dict, connected_nodes, nlayers, e
     return end - start
 
 
-def batch_inference_affected(model, data: pyg.data.Data, log, folder: str, egonet=False, loader:str="default",
-                             num_samples=None):
+def batch_inference_affected(model, data: pyg.data.Data, log, folder: str, loader:str="default",
+                             num_samples=1):
     nlayers = count_layers(model)
     total_time = 0
 
     entries = os.listdir(folder)
-    data_folders = [entry for entry in entries if entry.isdigit() and os.path.isdir(os.path.join(folder, entry))]
+    data_folders = [entry for entry in entries if entry.isdigit() and os.path.isdir(os.path.join(folder, entry))][:num_samples]
     it = 0
     for data_dir in data_folders:
         it += 1
@@ -125,7 +125,7 @@ def batch_inference_affected(model, data: pyg.data.Data, log, folder: str, egone
                 [dst.item() for dst in removed_edges[1]]
         if loader == "default":
             inference_time = inference_affected(data, model, edge_dict,
-                               unique_ends, nlayers, egonet)
+                               unique_ends, nlayers)
             print(f"{inference_time:.4f} seconds for data dir {data_dir}\n")
             log.write(
                 f"{inference_time:.4f} seconds for data dir {data_dir}\n")
@@ -193,63 +193,47 @@ def main():
     elif args.model=="GIN":
         model = pureGIN(data.x.shape[1], 2).to(device)
 
-    available_model = []
-    name_prefix = f"{args.dataset}_{args.model}_{args.aggr}"
-    for file in os.listdir("examples/trained_model") :
-        if re.match(name_prefix + "_[0-9]+_[0-1]\.[0-9]+\.pt", file) :
-            available_model.append(file)
+    model = load_available_model(model, args).to(device)
 
-    if len(available_model) == 0 :  # no available model, train from scratch
-        print(f"No available model. Please run `python pure{args.model}.py --dataset {args.dataset} --aggr {args.aggr}`")
+    if args.range == "full":
+        out_folder = osp.join("examples", "timing_result", "ground_truth")
+        create_directory(out_folder)
+        prefix = "_".join(
+            [args.model, args.dataset, args.aggr, "T" if use_loader else "F"])
+        log = open(osp.join(out_folder, f"{prefix}.log"), 'a')
+        if not use_loader:
+            data.to(device)
+            inference(model, data, out_folder, prefix, log)
+        else:
+            loader = data_loader(data, num_layers=2, num_neighbour_per_layer=-1,
+                                 separate=False, persistent_workers=False)
+            inference(model, loader, out_folder, prefix, log)
+        log.close()
 
-    else :  # choose the model with the highest test acc
-        accuracy = [float(re.findall("[0-1]\.[0-9]+", model_name)[0]) for model_name in available_model if
-                    len(re.findall("[0-1]\.[0-9]+", model_name)) != 0]
-        index_best_model = np.argmax(accuracy)
-        model = load(model, available_model[index_best_model]).to(device)
+    elif args.range == "affected":
+        #create_directory(out_folder)
+        prefix = "_".join(
+            [args.model, args.dataset, args.aggr, str(args.perbatch), args.stream, args.loader])
+        timing_sampler(data, args)
+        out_folder = osp.join("examples", "timing_result", "affected")
+        create_directory(out_folder)
+        prefix = "_".join([args.model, args.dataset, args.aggr, str(args.perbatch), args.stream])
+        log = open(osp.join(out_folder, f"{prefix}.log"), 'a')
+        if args.perbatch >= 1:
+            batch_size = int(args.perbatch)
+        else:
+            batch_size = int(args.perbatch * data.num_edges)
 
-        if args.range == "full":
-            out_folder = osp.join("examples", "timing_result", "ground_truth")
-            create_directory(out_folder)
-            prefix = "_".join(
-                [args.model, args.dataset, args.aggr, "T" if use_loader else "F"])
-            log = open(osp.join(out_folder, f"{prefix}.log"), 'a')
-            if not use_loader:
-                data.to(device)
-                inference(model, data, out_folder, prefix, log)
-            else:
-                loader = data_loader(data, num_layers=2, num_neighbour_per_layer=-1,
-                                     separate=False, persistent_workers=False)  
-                inference(model, loader, out_folder, prefix, log)
-            log.close()
-
-        elif args.range == "affected":
-            #create_directory(out_folder)
-            prefix = "_".join(
-                [args.model, args.dataset, args.aggr, str(args.perbatch), args.stream, args.loader])
-            timing_sampler(data, args)
-            out_folder = osp.join("examples", "timing_result", "affected")
-            create_directory(out_folder)
-            prefix = "_".join([args.model, args.dataset, args.aggr, str(args.perbatch), args.stream])
-            log = open(osp.join(out_folder, f"{prefix}.log"), 'a')
-            if args.perbatch >= 1:
-                batch_size = int(args.perbatch)
-            else:
-                batch_size = int(args.perbatch * data.num_edges)
-
-            batch_sizes = defaultConfigs.batch_sizes
-            num_samples = defaultConfigs.num_samples
-            num_sample = num_samples[batch_sizes.index(batch_size)] if batch_size in batch_sizes else None
-            intr_result_dir = osp.join("examples", "intermediate", args.dataset, "min", args.stream,
-                                       f"batch_size_{batch_size}")
-            if args.model == "GIN":
-                num_sample = max(10, num_sample//10)
-            batch_inference_affected(
-                model, data, log, folder=intr_result_dir, egonet=args.binary, loader=args.loader, num_samples=num_sample)
-            intr_result_dir = osp.join("examples", "intermediate", args.dataset, "min", args.stream,
-                                       f"batch_size_{batch_size}")
-            batch_inference_affected(model, data, batch_size, log, folder=intr_result_dir, egonet=args.binary)
-            log.close()
+        batch_sizes = defaultConfigs.batch_sizes
+        num_samples = defaultConfigs.num_samples
+        num_sample = num_samples[batch_sizes.index(batch_size)] if batch_size in batch_sizes else 1
+        intr_result_dir = osp.join("examples", "intermediate", args.dataset, "min", args.stream,
+                                   f"batch_size_{batch_size}")
+        if args.model == "GIN":
+            num_sample = max(10, num_sample//10)
+        batch_inference_affected(
+            model, data, log, folder=intr_result_dir, loader=args.loader, num_samples=num_sample)
+        log.close()
 
 
 if __name__ == '__main__':
