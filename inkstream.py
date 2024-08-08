@@ -110,6 +110,7 @@ class inkstream:
         intm_initial = load_tensors_to_dict(
             osp.join(data_dir), skip=7, postfix="_initial.pt")
         if intm_initial == {}:
+            print("Run inference to prepare the result from last timestamp.")
             intm_initial = self.intm_fetched(data, initial_edges, False, inserted_edges, removed_edges,
                                              init_in_edge_dict, final_in_edge_dict, init_out_edge_dict, final_out_edge_dict)
         return final_edges, inserted_edges, removed_edges, init_in_edge_dict, init_out_edge_dict, final_in_edge_dict, final_out_edge_dict, intm_initial
@@ -334,8 +335,10 @@ class inkstream:
         for data_dir in tqdm(data_folders[:niters]):
             _, inserted_edges, removed_edges, init_in_edge_dict, init_out_edge_dict, final_in_edge_dict, final_out_edge_dict, intm_initial = self.load_context(
                 osp.join(self.folder, data_dir), data)
+            print("InkStream Starts.")
             cnt_dict, t_inc = self.incremental_inference(
                 init_out_edge_dict, init_in_edge_dict, final_out_edge_dict, final_in_edge_dict, intm_initial, inserted_edges, removed_edges)
+            print("InkStream Ends.")
             t_distribution.append(t_inc)
 
             for it_layer in cnt_dict.keys():

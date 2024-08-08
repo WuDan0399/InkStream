@@ -60,10 +60,11 @@ RUN /bin/bash -c "cd /opt/conda/envs/inkstream/lib/python3.8/site-packages/torch
     patch gcn_conv.py < /app/gnn_for_streaming_graphs/docker/gcn_conv.patch && \
     patch sage_conv.py < /app/gnn_for_streaming_graphs/docker/sage_conv.patch && \
     patch gin_conv.py < /app/gnn_for_streaming_graphs/docker/gin_conv.patch && \
-    export DYNAMIC_GNN_ROOT=/app/gnn_for_streaming_graphs"
+    "
 
 # Activate the 'baseline' environment by default
 RUN echo "conda activate inkstream" >> ~/.bashrc
+RUN echo "export DYNAMIC_GNN_ROOT=/app/gnn_for_streaming_graphs" >> ~/.bashrc
 
 # Set the default shell to use conda's bash
 SHELL ["conda", "run", "-n", "inkstream", "/bin/bash", "-c"]

@@ -9,7 +9,6 @@ from load_dataset import load_dataset
 @torch.no_grad()
 def inference_for_intermediate_result(model, loader, save_dir:str = "", postfix: str = "") :
     model.eval()
-    print("Using Neighbour Loader for Full Graph Inference")
     intermediate_result_each_layer = defaultdict(lambda: defaultdict(lambda: torch.empty((0))))
 
     if isinstance(loader, pyg.loader.neighbor_loader.NeighborLoader):
