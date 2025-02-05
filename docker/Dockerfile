@@ -51,20 +51,20 @@ RUN conda run -n inkstream pip install torch_geometric pynvml && \
     conda run -n inkstream pip install pyg_lib torch_scatter torch_sparse torch_cluster torch_spline_conv -f https://data.pyg.org/whl/torch-2.2.0+cu118.html
 
 #Clone the InkStream repository
-RUN git clone https://github.com/WuDan0399/gnn_for_streaming_graphs.git /app/gnn_for_streaming_graphs
+RUN git clone https://github.com/WuDan0399/InkStream.git /app/InkStream
 # Set the working directory
-WORKDIR /app/gnn_for_streaming_graphs
+WORKDIR /app/InkStream
 
 # Apply the patch to torch_geometric in the 'inkstream' environment
 RUN /bin/bash -c "cd /opt/conda/envs/inkstream/lib/python3.8/site-packages/torch_geometric/nn/conv/ && \
-    patch gcn_conv.py < /app/gnn_for_streaming_graphs/docker/gcn_conv.patch && \
-    patch sage_conv.py < /app/gnn_for_streaming_graphs/docker/sage_conv.patch && \
-    patch gin_conv.py < /app/gnn_for_streaming_graphs/docker/gin_conv.patch && \
+    patch gcn_conv.py < /app/InkStream/docker/gcn_conv.patch && \
+    patch sage_conv.py < /app/InkStream/docker/sage_conv.patch && \
+    patch gin_conv.py < /app/InkStream/docker/gin_conv.patch && \
     "
 
 # Activate the 'baseline' environment by default
 RUN echo "conda activate inkstream" >> ~/.bashrc
-RUN echo "export DYNAMIC_GNN_ROOT=/app/gnn_for_streaming_graphs" >> ~/.bashrc
+RUN echo "export DYNAMIC_GNN_ROOT=/app/InkStream" >> ~/.bashrc
 
 # Set the default shell to use conda's bash
 SHELL ["conda", "run", "-n", "inkstream", "/bin/bash", "-c"]
