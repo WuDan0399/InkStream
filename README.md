@@ -1,6 +1,6 @@
 # InkStream: Instantaneous GNN Inference on Dynamic Graphs via Incremental Update (IPDPS 2025)
 
-### [Paper](http://arxiv.org/abs/2309.11071) | [Code](https://github.com/WuDan0399/InkStream.git)
+### [Paper](https://ieeexplore.ieee.org/document/11078484) | [Code](https://github.com/WuDan0399/InkStream.git)
 
 PyTorch implementation of optimizing the GNN inference for dynamic graphs via incremental computing. InkStream is able to reduce the inference time to milliseconds for dynamic graphs evolving with minor changes each time.
 
@@ -31,14 +31,16 @@ PyTorch implementation of optimizing the GNN inference for dynamic graphs via in
     python timing_original.py --dataset cora --model GCN --aggr min --perbatch 100 --stream mix --range affected
     ```
 
-## Citation (To be updated)
+## Citation
 If you find this project useful in your research, please cite our paper:
 
 ```css
-@article{wu2023inkstream,
-  title={InkStream: Instantaneous GNN Inference on Dynamic Graphs via Incremental Update},
+@inproceedings{wu2025inkstream,
+  title={Inkstream: Instantaneous GNN Inference on Dynamic Graphs via Incremental Update},
   author={Wu, Dan and Li, Zhaoying and Mitra, Tulika},
-  journal={arXiv preprint arXiv:2309.11071},
-  year={2023}
+  booktitle={2025 IEEE International Parallel and Distributed Processing Symposium (IPDPS)},
+  pages={1273--1285},
+  year={2025},
+  organization={IEEE}
 }
 ```
